@@ -19,15 +19,21 @@ SHIFT = -580
 GAMMA = 0.5
 L_P = 10
 R_P = 95
-RGB_KT = 16
 
 
 def parse_args():
     """Read and check args."""
     app = argparse.ArgumentParser()
-    app.add_argument("input")
-    app.add_argument("output")
+    app.add_argument("input", help="Input image")
+    app.add_argument("output", help="Output image")
+    app.add_argument("--rgb_kt", "-r", default=16, type=int,
+                     help="Aberrations power, 16 is default")
+    if len(sys.argv) < 3:
+        app.print_help()
+        sys.exit(0)
     args = app.parse_args()
+    if args.rgb_kt < 0:
+        raise ValueError("Rgb shift parameter must be > 0!")
     return args
 
 
@@ -90,6 +96,8 @@ def adjust_contrast(im, l_p, r_p):
 
 def rgb_shift(img, kt):
     """Apply chromatic aberration."""
+    if kt % 2 != 0:
+        kt += 1
     shp = img.shape
     red = img[:, :, 0]
     green = img[:, :, 1]
@@ -110,54 +118,12 @@ def rgb_shift(img, kt):
     return new_im
 
 
-def horizonal_shifts(im, colorized=False):
-    """Add random horizontal shifts."""
-    w, h, d = im.shape
-    processed = []
-    shifts_borders_num = random.choice(range(6, 16, 2))
-    shifts_borders = [0] + list(sorted(np.random.choice(range(w), shifts_borders_num, replace=False))) + [h]
-    for num, border in enumerate(shifts_borders[1:]):
-        prev_border = shifts_borders[num]
-        pic_piece = im[prev_border: border, :, :]
-        shift = 0 if num % 2 != 0 else random.choice(range(20))
-        shifted = np.roll(pic_piece, shift=shift, axis=1)
-        shifted = shifted if not colorized else np.roll(shifted, shift=shift, axis=2)
-        processed.append(shifted)
-    new_im = np.concatenate(processed, axis=0)
-    new_im = tf.resize(new_im, (w, h))
-    return new_im
-
-
-def amplify(im):
-    """Self-overlap."""
-    REPEATS = 0
-    shift = int(np.random.uniform(low=30, high=130))
-    sign = np.random.choice([-1, 1], 1)[0]
-    shift *= sign
-    # print(shift)
-    delim, kt = 1, 3
-    layer_sh = np.roll(a=im, axis=1, shift=shift) / kt
-    im += layer_sh
-    delim += 1 / kt
-    kt /= 3
-
-    for _ in range(REPEATS):
-        layer_sh = np.roll(a=layer_sh, axis=1, shift=shift) / kt
-        im += layer_sh
-        delim += 1 / kt
-        kt /= 3
-
-    im /= delim
-    # im[im > 1] = 1.0
-    return im
-
-
 def main():
     """Entry point."""
     args = parse_args()
     im = io.imread(args.input)
     im = tf.resize(im, (960, 1280))
-    im = rgb_shift(im, kt=RGB_KT)
+    im = rgb_shift(im, kt=args.rgb_kt)
     im = exposure.adjust_gamma(image=im, gain=GAMMA)
     layers_upd = []
     for l_num in range(im.shape[2]):

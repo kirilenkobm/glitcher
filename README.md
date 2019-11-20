@@ -1,13 +1,13 @@
 # Glitcher
 
-Код - приложение к статье ******.
+Находящийся здесь код - приложение к статьям о программировании в моем аккаунте на Медиуме <https://medium.com/me/stories/public>.
 Репозиторий создан исключительно со справочными целями.
 
-This code is just a supplementary material for my story posted on ******.
-It's written in Russian, however, I consider translation in English at some point.
+The code here is a supplementary material to programming articles published in my account on Medium <https://medium.com/me/stories/public>.
+The repository was created for reference purposes only.
 
-Dieser Code ist nur ein ergänzendes Material für meine Geschichte, die auf ****** gepostet wurde.
-Es ist in russischer Sprache verfasst, ich denke jedoch, dass ich irgendwann eine Übersetzung in englischer Sprache in Betracht ziehen kann.
+Der Code hier ist ein zusätzliches Material zu Programmierartikeln, die in meinem Konto auf Medium <https://medium.com/me/stories/public> veröffentlicht wurden.
+Das Repository wurde nur zu Referenzzwecken erstellt.
 
-Ce code est juste un complément à mon histoire postée sur ******.
-C'est écrit en russe, cependant, je considère la traduction en anglais à un moment donné.
+Le code ici est un complément à la programmation des articles publiés dans mon compte sur Medium <https://medium.com/me/stories/public>.
+Le référentiel a été créé à des fins de référence uniquement.
