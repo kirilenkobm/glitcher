@@ -33,7 +33,7 @@ def parse_args():
         sys.exit(0)
     args = app.parse_args()
     if args.rgb_kt < 0:
-        raise ValueError("Rgb shift parameter must be > 0!")
+        raise argparse.ArgumentTypeError("Rgb shift parameter must be > 0!")
     return args
 
 
