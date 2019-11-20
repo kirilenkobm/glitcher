@@ -78,7 +78,7 @@ def process_mp3(mp3_file, shape, chan_num=0):
     sound = AudioSegment.from_mp3(mp3_file)
     sound_array = sound.get_array_of_samples()[:x * y]
 
-    for num, inds in enumerate(parts(list(range(len(sound_array))), n=x)):
+    for num, inds in enumerate(parts(list(range(len(sound_array))), x)):
         if num % 2 != 0:
             continue
         for inum, ind in enumerate(inds):
