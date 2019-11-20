@@ -11,13 +11,13 @@ from skimage import transform as tf
 from skimage import exposure
 from skimage import filters
 from skimage.draw import polygon
+from pydub import AudioSegment
+
 
 TEMP_DIR = "temp"
 LAME_BINARY = "lame"
 KHZ = 16
-S_QUALITY = 3
-BITRATE = 12
-SHIFT = -580
+SHIFT = 150
 
 
 def parse_args():
@@ -65,7 +65,35 @@ def id_gen(size=6, chars=string.ascii_uppercase + string.digits):
     return "".join(random.choice(chars) for _ in range(size))
 
 
-def process_layer(layer, s_qual, bitrate):
+def parts(lst, n=25):
+    """Split a list into a list of lists of len n."""
+    return [lst[i:i + n] for i in iter(range(0, len(lst), n))]
+
+
+def process_mp3(mp3_file, shape, chan_num=0):
+    """Add glitches to a mp3 file itself."""
+    # get size of image
+    x, y = shape[0], shape[1]
+    # read the mp3
+    sound = AudioSegment.from_mp3(mp3_file)
+    sound_array = sound.get_array_of_samples()[:x * y]
+
+    for num, inds in enumerate(parts(list(range(len(sound_array))), n=x)):
+        if num % 2 != 0:
+            continue
+        for inum, ind in enumerate(inds):
+            if chan_num == 0:
+                sound_array[ind] = sound_array[ind - x * num % 10]
+            elif chan_num == 1:
+                sound_array[ind] = sound_array[ind - x * num % 11]
+            elif chan_num == 2:
+                sound_array[ind] = sound_array[ind - x * num % 12]
+
+    new_sound = sound._spawn(sound_array)
+    new_sound.export(mp3_file, format='mp3')
+
+
+def process_layer(layer, s_qual, bitrate, ch_num):
     """Mp3 compress and decompress a layer."""
     w, h = layer.shape
     layer_flat = layer.reshape((w * h))
@@ -92,6 +120,8 @@ def process_layer(layer, s_qual, bitrate):
     rc = subprocess.call(mp3_compr, shell=True)
     if rc != 0:
         sys.exit("Sorry, lame failed")
+
+    process_mp3(mp3_compressed, layer.shape, ch_num)
 
     rc = subprocess.call(mp3_decompr, shell=True)
     if rc != 0:
@@ -144,7 +174,7 @@ def rgb_shift(img, kt):
 
 
 def add_stripe(im):
-    """Add random shapes."""
+    """Add a random stripe."""
     stripe = np.zeros((im.shape))
     width = np.random.choice(range(10, 200), 1)[0]
     poly = np.array(((0, 0),
@@ -174,7 +204,7 @@ def main():
     layers_upd = []
     for l_num in range(im.shape[2]):
         layer = im[:, :, l_num]
-        proc_layer = process_layer(layer, args.s_quality, args.bitrate)
+        proc_layer = process_layer(layer, args.s_quality, args.bitrate, l_num)
         layers_upd.append(proc_layer)
     upd_im = np.concatenate(layers_upd, axis=2)
     upd_im = np.roll(a=upd_im, axis=1, shift=SHIFT)
