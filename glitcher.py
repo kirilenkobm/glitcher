@@ -9,6 +9,8 @@ import numpy as np
 from skimage import io
 from skimage import transform as tf
 from skimage import exposure
+from skimage import filters
+from skimage.draw import polygon
 
 TEMP_DIR = "temp"
 LAME_BINARY = "lame"
@@ -16,9 +18,6 @@ KHZ = 16
 S_QUALITY = 3
 BITRATE = 12
 SHIFT = -580
-GAMMA = 0.5
-L_P = 10
-R_P = 95
 
 
 def parse_args():
@@ -28,12 +27,36 @@ def parse_args():
     app.add_argument("output", help="Output image")
     app.add_argument("--rgb_kt", "-r", default=16, type=int,
                      help="Aberrations power, 16 is default")
+    app.add_argument("--lp", type=int, default=10,
+                     help="Value in range [0..50]. The bigger, "
+                           "the brighter lights are")
+    app.add_argument("--rp", type=int, default=95,
+                     help="Value in range [50..100]. The lesser, "
+                          "the deeper shadows are")
+    app.add_argument("--gamma", "-g", type=float, default=0.4,
+                     help="Gamma correction")
+    app.add_argument("--bitrate", "-b", type=int, default=12,
+                     help="Compressed sound bitrate")
+    app.add_argument("--s_quality", "-q", type=int, default=3,
+                     help="Sound quality, val in range [0..10]")
+    app.add_argument("--stripe", "--cs", action="store_true",
+                     dest="stripe", help="Draw a crimson stripe")
     if len(sys.argv) < 3:
         app.print_help()
         sys.exit(0)
     args = app.parse_args()
     if args.rgb_kt < 0:
         raise argparse.ArgumentTypeError("Rgb shift parameter must be > 0!")
+    if not 0 <= args.lp <= 50:
+        raise argparse.ArgumentTypeError("l_p arg must be > 0 and < 50")
+    if not 50 <= args.rp <= 100:
+        raise argparse.ArgumentTypeError("l_p arg must be > 0 and < 50")
+    if args.gamma < 0.0:
+        raise argparse.ArgumentTypeError("gamma value must be >= 0.0!")
+    if args.bitrate < 0:
+        raise argparse.ArgumentTypeError("bitrate must be a positve value!")
+    if not 0 <= args.s_quality <= 10:
+        raise argparse.ArgumentTypeError("Sound quality must be in range [0..10]!")
     return args
 
 
@@ -42,7 +65,7 @@ def id_gen(size=6, chars=string.ascii_uppercase + string.digits):
     return "".join(random.choice(chars) for _ in range(size))
 
 
-def process_layer(layer):
+def process_layer(layer, s_qual, bitrate):
     """Mp3 compress and decompress a layer."""
     w, h = layer.shape
     layer_flat = layer.reshape((w * h))
@@ -62,8 +85,8 @@ def process_layer(layer):
     with open(raw_channel, "wb") as f:
         f.write(bytes_str)
 
-    mp3_compr = f'{LAME_BINARY} -r --unsigned -s {KHZ} -q {S_QUALITY} --resample 16 ' \
-                f'--bitwidth 8 -b {BITRATE} -m m {raw_channel} "{mp3_compressed}"'
+    mp3_compr = f'{LAME_BINARY} -r --unsigned -s {KHZ} -q {s_qual} --resample 16 ' \
+                f'--bitwidth 8 -b {bitrate} -m m {raw_channel} "{mp3_compressed}"'
     mp3_decompr = f'{LAME_BINARY} --decode -x -t "{mp3_compressed}" {decompressed}'
 
     rc = subprocess.call(mp3_compr, shell=True)
@@ -80,8 +103,10 @@ def process_layer(layer):
     for t_file in temp_files:
         os.remove(t_file) if os.path.isfile(t_file) else None
     
-    every_2nd = [x / 255 for i, x in enumerate(mp3_bytes[: 2 * len(bytes_str)]) if i % 2 == 0]
-    result = np.array(every_2nd).reshape(w, h, 1)
+    arr_diff = len(mp3_bytes) // len(bytes_str)
+    mp3_trimmed = enumerate(mp3_bytes[: arr_diff* len(bytes_str)])
+    every_Nth = [x / 255 for i, x in mp3_trimmed if i % arr_diff == 0]
+    result = np.array(every_Nth).reshape(w, h, 1)
     result[result > 1.0] = 1.0
     result[result < 0.0] = 0.0
     return result
@@ -118,21 +143,42 @@ def rgb_shift(img, kt):
     return new_im
 
 
+def add_stripe(im):
+    """Add random shapes."""
+    stripe = np.zeros((im.shape))
+    width = np.random.choice(range(10, 200), 1)[0]
+    poly = np.array(((0, 0),
+                     (0, width),
+                     (im.shape[0], width),
+                     (im.shape[0], 0)))
+
+    rr, cc = polygon(poly[:, 0], poly[:, 1], stripe.shape)
+    stripe[rr, cc, 0] = 0.7
+    stripe[rr, cc, 1] = 0.1
+    stripe[rr, cc, 2] = 0.2
+    stripe = np.roll(stripe, shift=np.random.choice(range(1000), 1)[0], axis=1)
+    stripe = filters.gaussian(stripe, sigma=5, multichannel=True, mode='reflect', cval=0.6)
+    im += stripe
+    im[im > 1.0] = 1.0
+    return im
+
+
 def main():
     """Entry point."""
     args = parse_args()
     im = io.imread(args.input)
     im = tf.resize(im, (960, 1280))
     im = rgb_shift(im, kt=args.rgb_kt)
-    im = exposure.adjust_gamma(image=im, gain=GAMMA)
+    im = add_stripe(im) if args.stripe else im
+    im = exposure.adjust_gamma(image=im, gain=args.gamma)
     layers_upd = []
     for l_num in range(im.shape[2]):
         layer = im[:, :, l_num]
-        proc_layer = process_layer(layer)
+        proc_layer = process_layer(layer, args.s_quality, args.bitrate)
         layers_upd.append(proc_layer)
     upd_im = np.concatenate(layers_upd, axis=2)
     upd_im = np.roll(a=upd_im, axis=1, shift=SHIFT)
-    upd_im = adjust_contrast(upd_im, L_P, R_P)
+    upd_im = adjust_contrast(upd_im, args.lp, args.rp)
     io.imsave(args.output, upd_im)
 
 if __name__ == "__main__":
